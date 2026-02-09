@@ -8,7 +8,7 @@ robots:
   robot_mode: 'diff'
   init_mode: 0
   init_state_list: [[2, 2, 0], [18, 2, 0]]
-  goal_list: [[18, 18], [2, 18]]
+  goal_list: [[-5, -5], [-5, -5]] # goal 삭제
   radius_list: [0.3, 0.3] # 각 로봇의 물리적인 반지름 크기 (0.3m)
   vel_max: [1.5, 1.5] # 로봇의 최대 이동 속도 및 회전 속도 제한
   lidar2d: 
