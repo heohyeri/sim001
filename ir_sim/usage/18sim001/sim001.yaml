@@ -1,0 +1,24 @@
+# usage/18sim001/sim001.yaml
+world:
+  world_width: 20
+  world_height: 20
+  step_time: 0.1
+
+robots:
+  robot_number: 2
+  robot_mode: 'diff'
+  init_mode: 0
+  init_state_list: [[2, 2, 0], [18, 2, 0]]  # 로봇 1(좌하단), 로봇 2(우하단)
+  goal_list: [[18, 18], [2, 18]]
+  radius_list: [0.3, 0.3]
+  vel_max: [1.5, 1.5]
+  # 두 로봇 모두 Lidar 센서 장착
+  lidar2d: {id_list: [0, 1], range_max: 4, number: 36, noise: false, angle_min: -3.14, angle_max: 3.14}
+
+obs_lines:
+  number: 8
+  obs_line_states: [
+    [0, 0, 20, 0], [20, 0, 20, 20], [20, 20, 0, 20], [0, 20, 0, 0], # 외곽 벽
+    [0, 8, 14, 8], [6, 14, 20, 14], # 가로 벽
+    [10, 8, 10, 4], [10, 14, 10, 18] # 세로 벽
+  ]
