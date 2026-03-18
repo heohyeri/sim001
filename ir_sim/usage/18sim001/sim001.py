@@ -115,11 +115,11 @@ for i in range(15000):
         env.robot_list[0].visited_points = shared.copy()
         env.robot_list[1].visited_points = shared.copy()
 
-    env.robot_step(vel_list, vel_type='omni')
+    env.robot_step(vel_list, vel_type='omni', stop=False)
     env.collision_check()
 
     if i % render_interval == 0:
-        env.render(0.001)
+        env.render(0.001, show_goal=False, show_text=False)
 
         if target_plot is None:
             target_plot = env.world_plot.ax.scatter(
