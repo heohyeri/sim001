@@ -16,7 +16,8 @@ from matplotlib.patches import Polygon
 class env_plot:
     def __init__(self, width=10, height=10, components=dict(),  full=False, keep_path=False, map_matrix=None, offset_x = 0, offset_y=0, **kwargs):
     
-        self.fig, self.ax = plt.subplots()
+        figsize = kwargs.get('figsize', None)
+        self.fig, self.ax = plt.subplots(figsize=figsize)
         
         self.width = width
         self.height = height
