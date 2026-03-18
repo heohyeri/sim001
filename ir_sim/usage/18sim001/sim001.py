@@ -5,10 +5,9 @@ import matplotlib.pyplot as plt
 
 env = env_base('sim001.yaml', figsize=(19.2, 19.2))
 repulsion_range = 8.0
-cruise_speed = 8.0
-approach_gain = 1.0
-render_interval = 5
-
+cruise_speed = 12.0
+approach_gain = 1.5
+render_interval = 2
 
 def point_to_segment_distance(point, segment):
     start = np.array(segment[:2], dtype=float)
