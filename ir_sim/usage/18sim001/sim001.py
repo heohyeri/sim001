@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 
 env = env_base('sim001.yaml', figsize=(19.2, 19.2))
-scale = 3.0
+scale = 10.0
 
 target_points = np.array([
     [1.5, 1.5], [8.5, 2.5],
