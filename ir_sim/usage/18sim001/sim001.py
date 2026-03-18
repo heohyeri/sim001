@@ -51,7 +51,7 @@ def generate_target_points(
     return np.array(points)
 
 
-target_points = generate_target_points(count=30)
+target_points = generate_target_points(count=50)
 
 
 for robot in env.robot_list:
