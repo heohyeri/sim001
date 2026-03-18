@@ -13,11 +13,11 @@ robots:
   init_state_list: [[10, 10, 0], [90, 10, 0], [10, 90, 0], [90, 90, 0]]
   goal_list: [[-2, -2], [-2, -2], [-2, -2], [-2, -2]]
   radius_list: [0.2, 0.2, 0.2, 0.2]
-  vel_max: [3.0, 3.0]
+  vel_max: [5.0, 3.0]
   lidar2d:
     id_list: [0, 1, 2, 3]
-    range_max: 3.0
-    number: 30
+    range_max: 12.0
+    number: 60
     noise: false
     angle_min: -3.14
     angle_max: 3.14

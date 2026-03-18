@@ -4,6 +4,10 @@ import matplotlib.pyplot as plt
 
 
 env = env_base('sim001.yaml', figsize=(19.2, 19.2))
+repulsion_range = 8.0
+cruise_speed = 8.0
+approach_gain = 1.0
+render_interval = 5
 
 
 def point_to_segment_distance(point, segment):
@@ -52,6 +56,8 @@ def generate_target_points(
 
 
 target_points = generate_target_points(count=50)
+target_colors = ['yellow'] * len(target_points)
+target_plot = None
 
 
 for robot in env.robot_list:
@@ -89,14 +95,14 @@ for i in range(15000):
             f_rep = np.array([0.0, 0.0])
             if robot.lidar is not None:
                 for d, a in zip(robot.lidar.range_data, robot.lidar.angle_list):
-                    if d < 3.0:
+                    if d < repulsion_range:
                         actual_a = robot.state[2, 0] - np.pi / 2 + a
                         rep_dir = np.array([np.cos(actual_a), np.sin (actual_a)])
                         f_rep -= (rep_dir / (max(d, 0.1)**2))
             
 
             dist_to_target = np.linalg.norm(target - pos)
-            speed = 6.0 if dist_to_target > 5.0 else 1.2 * dist_to_target
+            speed = cruise_speed if dist_to_target > cruise_speed else approach_gain * dist_to_target
             vel = speed * f_att + 0.6 * f_rep
         else:
 
@@ -111,14 +117,24 @@ for i in range(15000):
 
     env.robot_step(vel_list, vel_type='omni')
     env.collision_check()
-    env.render(0.001)
 
-    for p_idx, pt in enumerate(target_points):
-        is_visited = any(p_idx in r.visited_points for r in env.robot_list)
-        color = 'gray' if is_visited else 'yellow'
-        env.world_plot.ax.plot(pt[0], pt[1], marker='o', color=color, markersize=5, markeredgecolor='black')
-    
-    plt.pause(0.01)
+    if i % render_interval == 0:
+        env.render(0.001)
+
+        if target_plot is None:
+            target_plot = env.world_plot.ax.scatter(
+                target_points[:, 0],
+                target_points[:, 1],
+                s=25,
+                c=target_colors,
+                edgecolors='black'
+            )
+
+        for p_idx in range(len(target_points)):
+            is_visited = any(p_idx in r.visited_points for r in env.robot_list)
+            target_colors[p_idx] = 'gray' if is_visited else 'orange'
+
+        target_plot.set_color(target_colors)
 
     if all(len(r.visited_points) == len(target_points) for r in env.robot_list):
         print(f"{i * 0.1:.1f} seconds: Mission Success! All prey captured through collaboration.")
