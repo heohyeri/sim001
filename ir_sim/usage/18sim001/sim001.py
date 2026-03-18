@@ -4,14 +4,54 @@ import matplotlib.pyplot as plt
 
 
 env = env_base('sim001.yaml', figsize=(19.2, 19.2))
-scale = 10.0
 
-target_points = np.array([
-    [1.5, 1.5], [8.5, 2.5],
-    [5.0, 1.5],
-    [1.5, 5.5], [8.5, 4.5],
-    [2.0, 9.0], [8.0, 9.0], [5,6], [5,9]
-]) * scale
+
+def point_to_segment_distance(point, segment):
+    start = np.array(segment[:2], dtype=float)
+    end = np.array(segment[2:], dtype=float)
+    direction = end - start
+    length_sq = np.dot(direction, direction)
+
+    if length_sq == 0:
+        return np.linalg.norm(point - start)
+
+    projection = np.dot(point - start, direction) / length_sq
+    projection = np.clip(projection, 0.0, 1.0)
+    closest = start + projection * direction
+    return np.linalg.norm(point - closest)
+
+
+def generate_target_points(
+    count,
+    world_size=(100, 100),
+    margin=8.0,
+    min_spacing=10.0,
+    wall_clearance=4.0,
+    seed=7
+):
+    rng = np.random.default_rng(seed)
+    width, height = world_size
+    points = []
+    wall_segments = env.components['obs_lines'].obs_line_states
+
+    while len(points) < count:
+        candidate = np.array([
+            rng.uniform(margin, width - margin),
+            rng.uniform(margin, height - margin)
+        ])
+
+        if any(np.linalg.norm(candidate - existing) < min_spacing for existing in points):
+            continue
+
+        if any(point_to_segment_distance(candidate, segment) < wall_clearance for segment in wall_segments):
+            continue
+
+        points.append(candidate)
+
+    return np.array(points)
+
+
+target_points = generate_target_points(count=30)
 
 
 for robot in env.robot_list:
@@ -76,7 +116,7 @@ for i in range(15000):
     for p_idx, pt in enumerate(target_points):
         is_visited = any(p_idx in r.visited_points for r in env.robot_list)
         color = 'gray' if is_visited else 'yellow'
-        env.world_plot.ax.plot(pt[0], pt[1], marker='o', color=color, markersize=8, markeredgecolor='black')
+        env.world_plot.ax.plot(pt[0], pt[1], marker='o', color=color, markersize=5, markeredgecolor='black')
     
     plt.pause(0.01)
 
