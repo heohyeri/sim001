@@ -19,6 +19,9 @@ escape_turn_gain = 1.8
 backoff_gain = 1.1
 rendezvous_cooldown = 3.0
 min_new_shared_points_for_recluster = 2
+hint_distance_weight = 0.75
+opportunistic_switch_ratio = 0.55
+opportunistic_capture_range = 6.0
 
 def point_to_segment_distance(point, segment):
     start = np.array(segment[:2], dtype=float)
@@ -332,6 +335,53 @@ def reassign_targets_for_rendezvous(event, robot_list, target_points, iteration)
     }
 
 
+def select_target_with_hints(robot, pos, target_points):
+    remaining_indices = [
+        idx for idx in range(len(target_points))
+        if idx not in robot.visited_points
+    ]
+
+    if not remaining_indices:
+        return None
+
+    nearest_global_idx = min(
+        remaining_indices,
+        key=lambda idx: np.linalg.norm(target_points[idx] - pos)
+    )
+    nearest_global_dist = np.linalg.norm(target_points[nearest_global_idx] - pos)
+
+    assigned_candidates = [
+        idx for idx in robot.assigned_targets
+        if idx in remaining_indices
+    ]
+
+    if assigned_candidates:
+        nearest_assigned_idx = min(
+            assigned_candidates,
+            key=lambda idx: np.linalg.norm(target_points[idx] - pos)
+        )
+        nearest_assigned_dist = np.linalg.norm(target_points[nearest_assigned_idx] - pos)
+
+        # Treat cluster output as a preference, not a hard constraint.
+        if (
+            nearest_global_idx != nearest_assigned_idx
+            and nearest_global_dist <= opportunistic_capture_range
+            and nearest_global_dist < opportunistic_switch_ratio * nearest_assigned_dist
+        ):
+            return target_points[nearest_global_idx]
+
+    assigned_set = set(assigned_candidates)
+    best_idx = min(
+        remaining_indices,
+        key=lambda idx: (
+            np.linalg.norm(target_points[idx] - pos) * hint_distance_weight
+            if idx in assigned_set
+            else np.linalg.norm(target_points[idx] - pos)
+        )
+    )
+    return target_points[best_idx]
+
+
 def sample_patrol_point(world_size=(100, 100), margin=8.0):
     while True:
         candidate = generate_target_points(
@@ -456,15 +506,7 @@ for i in range(15000):
 
         target = None
         if len(robot.visited_points) < len(target_points):
-            if robot.assigned_targets:
-                target = target_points[robot.assigned_targets[0]]
-            else:
-                min_dist = float('inf')
-                for p_idx, pt in enumerate(target_points):
-                    if p_idx not in robot.visited_points:
-                        dist = np.linalg.norm(pos - pt)
-                        if dist < min_dist:
-                            min_dist, target = dist, pt
+            target = select_target_with_hints(robot, pos, target_points)
         else:
             if np.linalg.norm(robot.patrol_target - pos) < 3.0:
                 robot.patrol_target = sample_patrol_point()
