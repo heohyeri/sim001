@@ -31,7 +31,7 @@ def generate_target_points(
     margin=8.0,
     min_spacing=10.0,
     wall_clearance=4.0,
-    seed=7
+    seed=None
 ):
     rng = np.random.default_rng(seed)
     width, height = world_size
