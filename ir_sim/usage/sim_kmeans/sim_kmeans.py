@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from ir_sim.util.range_detection import range_seg_matrix, range_seg_seg
 
 
-env = env_base('sim001.yaml', figsize=(19.2, 19.2))
+env = env_base('sim_kmeans.yaml', figsize=(19.2, 19.2))
 repulsion_range = 8.0
 cruise_speed = 12.0
 approach_gain = 1.5
