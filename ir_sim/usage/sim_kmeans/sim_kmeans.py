@@ -17,6 +17,8 @@ escape_distance = 1.8
 escape_steps = 10
 escape_turn_gain = 1.8
 backoff_gain = 1.1
+rendezvous_cooldown = 3.0
+min_new_shared_points_for_recluster = 2
 
 def point_to_segment_distance(point, segment):
     start = np.array(segment[:2], dtype=float)
@@ -107,7 +109,7 @@ def robot_can_detect_robot(observer, target, components):
 def share_rendezvous_information(robot_list, components):
     robot_count = len(robot_list)
     visited = [False] * robot_count
-    rendezvous_logs = []
+    rendezvous_events = []
 
     for start_idx in range(robot_count):
         if visited[start_idx]:
@@ -136,16 +138,198 @@ def share_rendezvous_information(robot_list, components):
                 ):
                     stack.append(next_idx)
 
+        component = sorted(component)
         component_changed = False
         for idx in component:
             if robot_list[idx].visited_points != shared_points:
                 component_changed = True
             robot_list[idx].visited_points = shared_points.copy()
 
-        if len(component) > 1 and component_changed:
-            rendezvous_logs.append((sorted(component), len(shared_points)))
+        component_tuple = tuple(component)
+        group_changed = any(
+            getattr(robot_list[idx], 'last_rendezvous_group', tuple()) != component_tuple
+            for idx in component
+        )
 
-    return rendezvous_logs
+        for idx in component:
+            robot_list[idx].last_rendezvous_group = component_tuple
+
+        if len(component) > 1 and (component_changed or group_changed):
+            rendezvous_events.append(
+                {
+                    'component': component,
+                    'shared_points': shared_points.copy(),
+                    'group_changed': group_changed,
+                }
+            )
+
+    return rendezvous_events
+
+
+def filter_rendezvous_events(events, robot_list, current_time, cooldown, min_new_shared_points):
+    filtered_events = []
+
+    for event in events:
+        component_tuple = tuple(event['component'])
+        last_time = max(
+            getattr(robot_list[idx], 'last_recluster_time', -np.inf)
+            for idx in event['component']
+        )
+        previous_shared_count = max(
+            getattr(robot_list[idx], 'last_shared_points_count', 0)
+            for idx in event['component']
+        )
+        new_shared_points = len(event['shared_points']) - previous_shared_count
+
+        if current_time - last_time < cooldown:
+            continue
+
+        if new_shared_points < min_new_shared_points:
+            continue
+
+        for idx in event['component']:
+            robot_list[idx].last_recluster_group = component_tuple
+            robot_list[idx].last_recluster_time = current_time
+            robot_list[idx].last_shared_points_count = len(event['shared_points'])
+
+        filtered_events.append(event)
+
+    return filtered_events
+
+
+def initialize_centroids(points, k, rng):
+    indices = rng.choice(len(points), size=k, replace=False)
+    return points[indices].astype(float, copy=True)
+
+
+def assign_points_to_centroids(points, centroids):
+    distances = np.linalg.norm(points[:, np.newaxis, :] - centroids[np.newaxis, :, :], axis=2)
+    return np.argmin(distances, axis=1)
+
+
+def run_kmeans(points, k, max_iter=25, seed=0):
+    if len(points) == 0:
+        return np.array([], dtype=int), np.empty((0, 2))
+
+    effective_k = min(max(1, k), len(points))
+    rng = np.random.default_rng(seed)
+    centroids = initialize_centroids(points, effective_k, rng)
+
+    for _ in range(max_iter):
+        labels = assign_points_to_centroids(points, centroids)
+        new_centroids = centroids.copy()
+
+        for cluster_idx in range(effective_k):
+            cluster_points = points[labels == cluster_idx]
+            if len(cluster_points) > 0:
+                new_centroids[cluster_idx] = cluster_points.mean(axis=0)
+
+        if np.allclose(new_centroids, centroids):
+            break
+
+        centroids = new_centroids
+
+    labels = assign_points_to_centroids(points, centroids)
+    return labels, centroids
+
+
+def order_target_indices(robot_position, target_indices, target_points):
+    remaining = list(target_indices)
+    ordered = []
+    current = np.array(robot_position, dtype=float)
+
+    while remaining:
+        next_idx = min(
+            remaining,
+            key=lambda idx: np.linalg.norm(target_points[idx] - current)
+        )
+        ordered.append(next_idx)
+        current = target_points[next_idx]
+        remaining.remove(next_idx)
+
+    return ordered
+
+
+def assign_clusters_to_robots(component, centroids, robot_list):
+    available_clusters = list(range(len(centroids)))
+    assignments = {}
+
+    for robot_idx in sorted(
+        component,
+        key=lambda idx: min(
+            np.linalg.norm(np.squeeze(robot_list[idx].state[0:2]) - centroid)
+            for centroid in centroids
+        )
+    ):
+        if not available_clusters:
+            assignments[robot_idx] = None
+            continue
+
+        robot_pos = np.squeeze(robot_list[robot_idx].state[0:2])
+        chosen_cluster = min(
+            available_clusters,
+            key=lambda cluster_idx: np.linalg.norm(robot_pos - centroids[cluster_idx])
+        )
+        assignments[robot_idx] = chosen_cluster
+        available_clusters.remove(chosen_cluster)
+
+    return assignments
+
+
+def reassign_targets_for_rendezvous(event, robot_list, target_points, iteration):
+    component = event['component']
+    shared_points = event['shared_points']
+    remaining_indices = [
+        idx for idx in range(len(target_points))
+        if idx not in shared_points
+    ]
+
+    for robot_idx in component:
+        robot = robot_list[robot_idx]
+        robot.assigned_targets = [
+            idx for idx in robot.assigned_targets
+            if idx in remaining_indices and idx not in robot.visited_points
+        ]
+
+    if not remaining_indices:
+        return {
+            'component': component,
+            'remaining_count': 0,
+            'cluster_count': len(component),
+        }
+
+    remaining_points = target_points[remaining_indices]
+    labels, centroids = run_kmeans(
+        remaining_points,
+        k=len(component),
+        seed=iteration + sum(component) + len(shared_points)
+    )
+
+    robot_cluster_map = assign_clusters_to_robots(component, centroids, robot_list)
+
+    for robot_idx in component:
+        cluster_idx = robot_cluster_map[robot_idx]
+        if cluster_idx is None:
+            robot_list[robot_idx].assigned_targets = []
+            continue
+
+        robot_targets = [
+            remaining_indices[point_offset]
+            for point_offset, label in enumerate(labels)
+            if label == cluster_idx
+        ]
+        robot_position = np.squeeze(robot_list[robot_idx].state[0:2])
+        robot_list[robot_idx].assigned_targets = order_target_indices(
+            robot_position,
+            robot_targets,
+            target_points
+        )
+
+    return {
+        'component': component,
+        'remaining_count': len(remaining_indices),
+        'cluster_count': len(centroids),
+    }
 
 
 def sample_patrol_point(world_size=(100, 100), margin=8.0):
@@ -245,6 +429,11 @@ target_plot = None
 for robot in env.robot_list:
     robot.visited_points = set()
     robot.patrol_target = sample_patrol_point()
+    robot.assigned_targets = []
+    robot.last_rendezvous_group = tuple()
+    robot.last_recluster_group = tuple()
+    robot.last_recluster_time = -np.inf
+    robot.last_shared_points_count = 0
 
 
 for i in range(15000):
@@ -260,15 +449,22 @@ for i in range(15000):
             if np.linalg.norm(pos - pt) < 1.2:
                 robot.visited_points.add(p_idx)
 
+        robot.assigned_targets = [
+            idx for idx in robot.assigned_targets
+            if idx not in robot.visited_points
+        ]
 
         target = None
         if len(robot.visited_points) < len(target_points):
-            min_dist = float('inf')
-            for p_idx, pt in enumerate(target_points):
-                if p_idx not in robot.visited_points:
-                    dist = np.linalg.norm(pos - pt)
-                    if dist < min_dist:
-                        min_dist, target = dist, pt
+            if robot.assigned_targets:
+                target = target_points[robot.assigned_targets[0]]
+            else:
+                min_dist = float('inf')
+                for p_idx, pt in enumerate(target_points):
+                    if p_idx not in robot.visited_points:
+                        dist = np.linalg.norm(pos - pt)
+                        if dist < min_dist:
+                            min_dist, target = dist, pt
         else:
             if np.linalg.norm(robot.patrol_target - pos) < 3.0:
                 robot.patrol_target = sample_patrol_point()
@@ -283,11 +479,26 @@ for i in range(15000):
         
         vel_list.append(vel)
 
-    rendezvous_logs = share_rendezvous_information(env.robot_list, env.components)
-    for component, shared_count in rendezvous_logs:
+    rendezvous_events = share_rendezvous_information(env.robot_list, env.components)
+    rendezvous_events = filter_rendezvous_events(
+        rendezvous_events,
+        env.robot_list,
+        i * env.step_time,
+        rendezvous_cooldown,
+        min_new_shared_points_for_recluster
+    )
+    for event in rendezvous_events:
+        reassignment = reassign_targets_for_rendezvous(
+            event,
+            env.robot_list,
+            target_points,
+            i
+        )
+        component = reassignment['component']
         print(
             f"{i * env.step_time:.1f}s rendezvous {component} "
-            f"shared {shared_count}/{len(target_points)} targets"
+            f"shared {len(event['shared_points'])}/{len(target_points)} targets, "
+            f"reclustered remaining {reassignment['remaining_count']} with K={reassignment['cluster_count']}"
         )
 
     env.robot_step(vel_list, vel_type='omni', stop=False)
