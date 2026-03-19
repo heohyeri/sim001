@@ -1,38 +1,42 @@
 world:
-  world_width: 10
-  world_height: 10
+  world_width: 100
+  world_height: 100
   step_time: 0.1
-  xy_resolution: 0.01 # meter
-  yaw_resolution: 5 # degree
-  # world_map: 'map_100_100.png'
+  xy_resolution: 0.01
+  yaw_resolution: 5
 
 robots:
-  square: [0, 0, 10, 10]
-  robot_number: 2
+  square: [8, 8, 92, 92]
+  robot_number: 4
   robot_mode: 'diff'
-  init_mode: 0
-  init_state_list: [[1, 1, 0], [9, 9, 0]]
-  goal_list: [[-2, -2], [-2, -2]] # goal 삭제
-  radius_list: [0.2, 0.2] # 각 로봇의 물리적인 반지름 크기 (0.3m)
-  vel_max: [1.0, 1.0] # 로봇의 최대 이동 속도 및 회전 속도 제한
-  lidar2d: 
-    id_list: [0, 1]       # 로봇의 인덱스 번호
-    range_max: 1.5         # 센서가 감지할 수 있는 최대 거리 (2미터)
-    number: 30            # 한 번에 쏘는 레이저 빔의 개수 (360도를 36개로 나누어 탐색)
-    noise: false          # 센서 데이터에 노이즈(오차)를 섞을지 여부
-    angle_min: -3.14      # 센서 탐색 범위의 시작 각도 (-π, 약 -180도)
-    angle_max: 3.14       # 센서 탐색 범위의 끝 각도 (π, 약 180도) -> 즉, 주변 360도 전 방향 탐색
+  robot_init_mode: 2
+  random_bear: true
+  radius_list: [0.2, 0.2, 0.2, 0.2]
+  vel_max: [8.0, 4.5]
+  lidar2d:
+    id_list: [0, 1, 2, 3]
+    range_max: 12.0
+    number: 30
+    noise: false
+    angle_min: -3.14
+    angle_max: 3.14
 
 obs_lines:
   number: 8
   obs_line_states: [
-    # [시작x, 시작y, 끝x, 끝y]
-    [0, 0, 10, 0],        # 아래쪽 외곽 벽
-    [10, 0, 10, 10],      # 오른쪽 외곽 벽
-    [10, 10, 0, 10],      # 위쪽 외곽 벽
-    [0, 10, 0, 0],        # 왼쪽 외곽 벽
-    [0, 4, 7, 4],    # 미로 내부 가로 벽 1 (y=4)
-    [3, 7, 10, 7],   # 미로 내부 가로 벽 2 (y=7)
-    [5, 4, 5, 3],    # 미로 내부 세로 벽 1 (x=5)
-    [5, 7, 5, 8]     # 미로 내부 세로 벽 2 (x=5)
+    [0, 0, 100, 0],
+    [100, 0, 100, 100],
+    [100, 100, 0, 100],
+    [0, 100, 0, 0],
+
+    [30, 40, 70, 40],
+    [30, 70, 70, 70],
+    [50, 40, 50, 30],
+    [50, 70, 50, 80],
+
+    [10, 70, 10, 50],
+
+    [70, 10, 85, 10],
+    [85, 10, 85, 20]
+
   ]
