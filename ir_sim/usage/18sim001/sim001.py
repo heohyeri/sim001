@@ -68,22 +68,16 @@ def to_pi(angle):
 
 
 def robot_can_detect_robot(observer, target, components):
-    if observer.lidar is None:
+    if observer.lidar is None or target.lidar is None:
         return False
 
     observer_pos = np.squeeze(observer.state[0:2])
     target_pos = np.squeeze(target.state[0:2])
     relative = target_pos - observer_pos
     distance = np.linalg.norm(relative)
+    communication_distance = observer.lidar.range_max + target.lidar.range_max
 
-    if distance == 0 or distance > observer.lidar.range_max:
-        return False
-
-    heading = observer.state[2, 0] - np.pi / 2
-    bearing = np.arctan2(relative[1], relative[0]) - heading
-    bearing = to_pi(bearing)
-
-    if not (observer.lidar.angle_min <= bearing <= observer.lidar.angle_max):
+    if distance == 0 or distance > communication_distance:
         return False
 
     segment = [observer_pos, target_pos]
