@@ -9,6 +9,14 @@ repulsion_range = 8.0
 cruise_speed = 12.0
 approach_gain = 1.5
 render_interval = 2
+repulsion_gain = 1.4
+tangential_gain = 0.9
+slowdown_range = 4.0
+min_escape_speed = 1.2
+escape_distance = 1.8
+escape_steps = 10
+escape_turn_gain = 1.8
+backoff_gain = 1.1
 
 def point_to_segment_distance(point, segment):
     start = np.array(segment[:2], dtype=float)
@@ -146,6 +154,95 @@ def share_rendezvous_information(robot_list, components):
     return rendezvous_logs
 
 
+def sample_patrol_point(world_size=(100, 100), margin=8.0):
+    while True:
+        candidate = generate_target_points(
+            count=1,
+            world_size=world_size,
+            margin=margin,
+            min_spacing=0.0,
+            wall_clearance=4.0,
+            seed=None
+        )[0]
+        return candidate
+
+
+def compute_avoidance_velocity(robot, target, pos):
+    target_offset = target - pos
+    dist_to_target = np.linalg.norm(target_offset)
+
+    if dist_to_target < 1e-6:
+        return np.zeros(2)
+
+    f_att = target_offset / dist_to_target
+    f_rep = np.zeros(2)
+    f_tan = np.zeros(2)
+    nearest_distance = repulsion_range
+    nearest_direction = None
+
+    if not hasattr(robot, 'escape_steps_remaining'):
+        robot.escape_steps_remaining = 0
+        robot.escape_tangent = np.zeros(2)
+        robot.escape_normal = np.zeros(2)
+
+    if robot.lidar is not None:
+        for d, a in zip(robot.lidar.range_data, robot.lidar.angle_list):
+            if d >= repulsion_range:
+                continue
+
+            actual_a = robot.state[2, 0] - np.pi / 2 + a
+            beam_direction = np.array([np.cos(actual_a), np.sin(actual_a)])
+            clearance = max(d, 0.25)
+            weight = (repulsion_range - clearance) / repulsion_range
+            f_rep -= beam_direction * (weight / (clearance ** 1.7))
+
+            if d < nearest_distance:
+                nearest_distance = d
+                nearest_direction = beam_direction
+
+    if nearest_direction is not None:
+        tangent_left = np.array([-nearest_direction[1], nearest_direction[0]])
+        tangent_right = -tangent_left
+        tangent = tangent_left if np.dot(tangent_left, f_att) >= np.dot(tangent_right, f_att) else tangent_right
+        tangent_weight = max(0.0, (slowdown_range - nearest_distance) / slowdown_range)
+        f_tan = tangent * tangent_weight
+
+        if nearest_distance < escape_distance:
+            robot.escape_steps_remaining = escape_steps
+            robot.escape_tangent = tangent
+            robot.escape_normal = nearest_direction
+
+    obstacle_factor = 0.0 if nearest_direction is None else max(
+        0.0, (slowdown_range - nearest_distance) / slowdown_range
+    )
+    att_weight = max(0.25, 1.0 - 0.65 * obstacle_factor)
+    speed_cap = cruise_speed * (1.0 - 0.55 * obstacle_factor)
+    speed_cap = max(min_escape_speed, speed_cap)
+    desired_speed = min(speed_cap, max(min_escape_speed * obstacle_factor, approach_gain * dist_to_target))
+
+    if robot.escape_steps_remaining > 0:
+        robot.escape_steps_remaining -= 1
+        escape_speed = max(min_escape_speed * 1.8, desired_speed)
+        escape_vel = (
+            escape_turn_gain * escape_speed * robot.escape_tangent
+            - backoff_gain * robot.escape_normal
+        )
+
+        if np.linalg.norm(escape_vel) > 1e-6:
+            return escape_vel
+    else:
+        robot.escape_tangent = np.zeros(2)
+        robot.escape_normal = np.zeros(2)
+
+    vel = (
+        desired_speed * att_weight * f_att
+        + repulsion_gain * f_rep
+        + tangential_gain * desired_speed * f_tan
+    )
+
+    return vel
+
+
 target_points = generate_target_points(count=50)
 target_colors = ['yellow'] * len(target_points)
 target_plot = None
@@ -153,6 +250,7 @@ target_plot = None
 
 for robot in env.robot_list:
     robot.visited_points = set()
+    robot.patrol_target = sample_patrol_point()
 
 
 for i in range(15000):
@@ -177,24 +275,14 @@ for i in range(15000):
                     dist = np.linalg.norm(pos - pt)
                     if dist < min_dist:
                         min_dist, target = dist, pt
+        else:
+            if np.linalg.norm(robot.patrol_target - pos) < 3.0:
+                robot.patrol_target = sample_patrol_point()
+            target = robot.patrol_target
         
 
         if target is not None:
-
-            f_att = (target - pos) / np.linalg.norm(target - pos)
-
-            f_rep = np.array([0.0, 0.0])
-            if robot.lidar is not None:
-                for d, a in zip(robot.lidar.range_data, robot.lidar.angle_list):
-                    if d < repulsion_range:
-                        actual_a = robot.state[2, 0] - np.pi / 2 + a
-                        rep_dir = np.array([np.cos(actual_a), np.sin (actual_a)])
-                        f_rep -= (rep_dir / (max(d, 0.1)**2))
-            
-
-            dist_to_target = np.linalg.norm(target - pos)
-            speed = cruise_speed if dist_to_target > cruise_speed else approach_gain * dist_to_target
-            vel = speed * f_att + 0.6 * f_rep
+            vel = compute_avoidance_velocity(robot, target, pos)
         else:
 
             vel = np.array([0.0, 0.0])
