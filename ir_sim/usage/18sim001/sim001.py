@@ -1,6 +1,7 @@
 import numpy as np
 from ir_sim.env import env_base
 import matplotlib.pyplot as plt
+from ir_sim.util.range_detection import range_seg_matrix, range_seg_seg
 
 
 env = env_base('sim001.yaml', figsize=(19.2, 19.2))
@@ -52,6 +53,97 @@ def generate_target_points(
         points.append(candidate)
 
     return np.array(points)
+
+
+def to_pi(angle):
+    return (angle + np.pi) % (2 * np.pi) - np.pi
+
+
+def robot_can_detect_robot(observer, target, components):
+    if observer.lidar is None:
+        return False
+
+    observer_pos = np.squeeze(observer.state[0:2])
+    target_pos = np.squeeze(target.state[0:2])
+    relative = target_pos - observer_pos
+    distance = np.linalg.norm(relative)
+
+    if distance == 0 or distance > observer.lidar.range_max:
+        return False
+
+    heading = observer.state[2, 0] - np.pi / 2
+    bearing = np.arctan2(relative[1], relative[0]) - heading
+    bearing = to_pi(bearing)
+
+    if not (observer.lidar.angle_min <= bearing <= observer.lidar.angle_max):
+        return False
+
+    segment = [observer_pos, target_pos]
+    blocked_by_map, _, map_range = range_seg_matrix(
+        segment,
+        components['map_matrix'],
+        components['xy_reso'],
+        observer.lidar.point_step_weight,
+        components['offset']
+    )
+
+    if blocked_by_map and map_range < distance:
+        return False
+
+    for line in components['obs_lines'].obs_line_states:
+        wall_segment = [
+            np.array([line[0], line[1]], dtype=float),
+            np.array([line[2], line[3]], dtype=float)
+        ]
+        blocked_by_wall, _, wall_range = range_seg_seg(segment, wall_segment)
+        if blocked_by_wall and wall_range < distance:
+            return False
+
+    return True
+
+
+def share_rendezvous_information(robot_list, components):
+    robot_count = len(robot_list)
+    visited = [False] * robot_count
+    rendezvous_logs = []
+
+    for start_idx in range(robot_count):
+        if visited[start_idx]:
+            continue
+
+        stack = [start_idx]
+        component = []
+        shared_points = set()
+
+        while stack:
+            idx = stack.pop()
+            if visited[idx]:
+                continue
+
+            visited[idx] = True
+            component.append(idx)
+            shared_points |= robot_list[idx].visited_points
+
+            for next_idx in range(robot_count):
+                if visited[next_idx] or next_idx == idx:
+                    continue
+
+                if (
+                    robot_can_detect_robot(robot_list[idx], robot_list[next_idx], components)
+                    or robot_can_detect_robot(robot_list[next_idx], robot_list[idx], components)
+                ):
+                    stack.append(next_idx)
+
+        component_changed = False
+        for idx in component:
+            if robot_list[idx].visited_points != shared_points:
+                component_changed = True
+            robot_list[idx].visited_points = shared_points.copy()
+
+        if len(component) > 1 and component_changed:
+            rendezvous_logs.append((sorted(component), len(shared_points)))
+
+    return rendezvous_logs
 
 
 target_points = generate_target_points(count=50)
@@ -109,10 +201,12 @@ for i in range(15000):
         
         vel_list.append(vel)
 
-    if np.linalg.norm(np.squeeze(env.robot_list[0].state[0:2]) - np.squeeze(env.robot_list[1].state[0:2])) < 6.0:
-        shared = env.robot_list[0].visited_points | env.robot_list[1].visited_points
-        env.robot_list[0].visited_points = shared.copy()
-        env.robot_list[1].visited_points = shared.copy()
+    rendezvous_logs = share_rendezvous_information(env.robot_list, env.components)
+    for component, shared_count in rendezvous_logs:
+        print(
+            f"{i * env.step_time:.1f}s rendezvous {component} "
+            f"shared {shared_count}/{len(target_points)} targets"
+        )
 
     env.robot_step(vel_list, vel_type='omni', stop=False)
     env.collision_check()
