@@ -35,7 +35,7 @@ def point_to_segment_distance(point, segment):
 
 def generate_target_points(
     count,
-    world_size=(100, 100),
+    world_size=(180, 180),
     margin=8.0,
     min_spacing=10.0,
     wall_clearance=4.0,
@@ -148,7 +148,7 @@ def share_rendezvous_information(robot_list, components):
     return rendezvous_logs
 
 
-def sample_patrol_point(world_size=(100, 100), margin=8.0):
+def sample_patrol_point(world_size=(180, 180), margin=8.0):
     while True:
         candidate = generate_target_points(
             count=1,
@@ -237,7 +237,7 @@ def compute_avoidance_velocity(robot, target, pos):
     return vel
 
 
-target_points = generate_target_points(count=50)
+target_points = generate_target_points(count=120)
 target_colors = ['yellow'] * len(target_points)
 target_plot = None
 
