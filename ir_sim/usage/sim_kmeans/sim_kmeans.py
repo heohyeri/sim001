@@ -1,4 +1,5 @@
 import numpy as np
+import time
 from ir_sim.env import env_base
 import matplotlib.pyplot as plt
 from ir_sim.util.range_detection import range_seg_matrix, range_seg_seg
@@ -485,8 +486,11 @@ for robot in env.robot_list:
     robot.last_recluster_time = -np.inf
     robot.last_shared_points_count = 0
 
+simulation_start_time = time.perf_counter()
 
 for i in range(15000):
+    simulation_time = i * env.step_time
+    elapsed_time = time.perf_counter() - simulation_start_time
     vel_list = []
     
     for r_idx, robot in enumerate(env.robot_list):
@@ -525,7 +529,7 @@ for i in range(15000):
     rendezvous_events = filter_rendezvous_events(
         rendezvous_events,
         env.robot_list,
-        i * env.step_time,
+        simulation_time,
         rendezvous_cooldown,
         min_new_shared_points_for_recluster
     )
@@ -538,7 +542,7 @@ for i in range(15000):
         )
         component = reassignment['component']
         print(
-            f"{i * env.step_time:.1f}s rendezvous {component} "
+            f"{elapsed_time:.1f}s rendezvous {component} "
             f"shared {len(event['shared_points'])}/{len(target_points)} targets, "
             f"reclustered remaining {reassignment['remaining_count']} with K={reassignment['cluster_count']}"
         )
@@ -565,5 +569,6 @@ for i in range(15000):
         target_plot.set_color(target_colors)
 
     if all(len(r.visited_points) == len(target_points) for r in env.robot_list):
-        print(f"{i * 0.1:.1f} seconds: Mission Success! All prey captured through collaboration.")
+        elapsed_time = time.perf_counter() - simulation_start_time
+        print(f"{elapsed_time:.1f} seconds: Mission Success! All prey captured through collaboration.")
         break

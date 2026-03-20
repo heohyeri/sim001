@@ -1,4 +1,5 @@
 import numpy as np
+import time
 from ir_sim.env import env_base
 import matplotlib.pyplot as plt
 from ir_sim.util.range_detection import range_seg_matrix, range_seg_seg
@@ -246,8 +247,10 @@ for robot in env.robot_list:
     robot.visited_points = set()
     robot.patrol_target = sample_patrol_point()
 
+simulation_start_time = time.perf_counter()
 
 for i in range(15000):
+    elapsed_time = time.perf_counter() - simulation_start_time
     vel_list = []
     
     for r_idx, robot in enumerate(env.robot_list):
@@ -286,7 +289,7 @@ for i in range(15000):
     rendezvous_logs = share_rendezvous_information(env.robot_list, env.components)
     for component, shared_count in rendezvous_logs:
         print(
-            f"{i * env.step_time:.1f}s rendezvous {component} "
+            f"{elapsed_time:.1f}s rendezvous {component} "
             f"shared {shared_count}/{len(target_points)} targets"
         )
 
@@ -312,5 +315,6 @@ for i in range(15000):
         target_plot.set_color(target_colors)
 
     if all(len(r.visited_points) == len(target_points) for r in env.robot_list):
-        print(f"{i * 0.1:.1f} seconds: Mission Success! All prey captured through collaboration.")
+        elapsed_time = time.perf_counter() - simulation_start_time
+        print(f"{elapsed_time:.1f} seconds: Mission Success! All prey captured through collaboration.")
         break
