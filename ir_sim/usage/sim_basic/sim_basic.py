@@ -314,7 +314,7 @@ for i in range(15000):
 
         target_plot.set_color(target_colors)
 
-    if all(len(r.visited_points) == len(target_points) for r in env.robot_list):
+    if all(any(p_idx in r.visited_points for r in env.robot_list) for p_idx in range(len(target_points))):
         elapsed_time = time.perf_counter() - simulation_start_time
-        print(f"{elapsed_time:.1f} seconds: Mission Success! All prey captured through collaboration.")
+        print(f"{elapsed_time:.1f} seconds: Mission Success! All target points visited.")
         break
