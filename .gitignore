@@ -132,3 +132,4 @@ test.py
 _build/
 settings.json
 .vscode/
+.DS_Store
