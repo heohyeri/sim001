@@ -1,10 +1,11 @@
 import numpy as np
+import time
 from ir_sim.env import env_base
 import matplotlib.pyplot as plt
 from ir_sim.util.range_detection import range_seg_matrix, range_seg_seg
 
 
-env = env_base('sim001.yaml', figsize=(19.2, 19.2))
+env = env_base('sim_basic.yaml', figsize=(19.2, 19.2))
 repulsion_range = 8.0
 cruise_speed = 12.0
 approach_gain = 1.5
@@ -35,7 +36,7 @@ def point_to_segment_distance(point, segment):
 
 def generate_target_points(
     count,
-    world_size=(100, 100),
+    world_size=(180, 180),
     margin=8.0,
     min_spacing=10.0,
     wall_clearance=4.0,
@@ -148,7 +149,7 @@ def share_rendezvous_information(robot_list, components):
     return rendezvous_logs
 
 
-def sample_patrol_point(world_size=(100, 100), margin=8.0):
+def sample_patrol_point(world_size=(180, 180), margin=8.0):
     while True:
         candidate = generate_target_points(
             count=1,
@@ -237,7 +238,7 @@ def compute_avoidance_velocity(robot, target, pos):
     return vel
 
 
-target_points = generate_target_points(count=50)
+target_points = generate_target_points(count=120)
 target_colors = ['yellow'] * len(target_points)
 target_plot = None
 
@@ -246,8 +247,10 @@ for robot in env.robot_list:
     robot.visited_points = set()
     robot.patrol_target = sample_patrol_point()
 
+simulation_start_time = time.perf_counter()
 
 for i in range(15000):
+    elapsed_time = time.perf_counter() - simulation_start_time
     vel_list = []
     
     for r_idx, robot in enumerate(env.robot_list):
@@ -286,7 +289,7 @@ for i in range(15000):
     rendezvous_logs = share_rendezvous_information(env.robot_list, env.components)
     for component, shared_count in rendezvous_logs:
         print(
-            f"{i * env.step_time:.1f}s rendezvous {component} "
+            f"{elapsed_time:.1f}s rendezvous {component} "
             f"shared {shared_count}/{len(target_points)} targets"
         )
 
@@ -311,6 +314,7 @@ for i in range(15000):
 
         target_plot.set_color(target_colors)
 
-    if all(len(r.visited_points) == len(target_points) for r in env.robot_list):
-        print(f"{i * 0.1:.1f} seconds: Mission Success! All prey captured through collaboration.")
+    if all(any(p_idx in r.visited_points for r in env.robot_list) for p_idx in range(len(target_points))):
+        elapsed_time = time.perf_counter() - simulation_start_time
+        print(f"{elapsed_time:.1f} seconds: Mission Success! All target points visited.")
         break
