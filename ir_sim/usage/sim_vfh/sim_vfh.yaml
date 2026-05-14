@@ -28,18 +28,18 @@ vfh_plus:
   histogram_threshold: 0.5
   wide_valley_width: 8
   boundary_margin: 1
-  cruise_speed: 8.0
-  approach_gain: 1.5
-  min_speed: 1.2
-  slowdown_distance: 4.0
+  cruise_speed: 12.0
+  approach_gain: 2.5
+  min_speed: 2.5
+  slowdown_distance: 2.0
   target_weight: 5.0
   current_weight: 1.0
   previous_weight: 0.8
-  slowdown_gain: 0.15
-  slowdown_heading_window: 1.047
-  max_heading_step: 0.75
+  slowdown_gain: 0.05
+  slowdown_heading_window: 0.785
+  max_heading_step: 1.2
   diff_turn_time: 0.25
-  wall_stop_margin: 0.1
+  wall_stop_margin: 0.05
   use_omni_drive: true
   stuck_window: 35
   stuck_min_travel: 2.0
