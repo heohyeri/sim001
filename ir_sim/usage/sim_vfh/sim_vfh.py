@@ -31,9 +31,7 @@ vfh_boundary_margin = vfh_config.get('boundary_margin', 3)
 vfh_target_weight = vfh_config.get('target_weight', 5.0)
 vfh_current_weight = vfh_config.get('current_weight', 2.0)
 vfh_previous_weight = vfh_config.get('previous_weight', 2.0)
-vfh_slowdown_distance = vfh_config.get('slowdown_distance', 4.0)
 vfh_slowdown_heading_window = vfh_config.get('slowdown_heading_window', np.pi / 3)
-vfh_slowdown_gain = vfh_config.get('slowdown_gain', 0.3)
 vfh_max_heading_step = vfh_config.get('max_heading_step', 0.45)
 diff_turn_time = vfh_config.get('diff_turn_time', 0.25)
 wall_stop_margin = vfh_config.get('wall_stop_margin', 0.3)
@@ -758,11 +756,8 @@ def compute_avoidance_command(robot, target, pos):
     selected_heading = limit_heading_change(current_heading, raw_heading)
     robot.previous_vfh_heading = selected_heading
 
-    heading_clearance = clearance_along_heading(robot, selected_heading)
-    obstacle_factor = max(0.0, (vfh_slowdown_distance - heading_clearance) / vfh_slowdown_distance)
-    speed_cap = cruise_speed * (1.0 - vfh_slowdown_gain * obstacle_factor)
-    speed_cap = max(min_escape_speed, speed_cap)
-    desired_speed = min(speed_cap, max(min_escape_speed, approach_gain * dist_to_target))
+    max_drive_speed = robot.vel_max[0, 0]
+    desired_speed = min(max_drive_speed, max(min_escape_speed, approach_gain * dist_to_target))
 
     if robot.mode == 'diff' and not use_omni_drive:
         heading_error = to_pi(selected_heading - robot.state[2, 0])
